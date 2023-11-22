@@ -1,0 +1,471 @@
+/*****************************************************************************
+ *
+ *
+ *  Grid_Isr.cla
+ *  Deals with floating point math and interrupts.
+ *
+ *
+ *****************************************************************************/
+
+
+#undef SFRA
+#include <Shared.h>
+
+
+#pragma CODE_SECTION(Cla1Task1,"Cla1Prog");
+#pragma CODE_SECTION(Cla1Task2,"Cla1Prog");
+#pragma CODE_SECTION(Cla1Task3,"Cla1Prog");
+#pragma CODE_SECTION(Cla1Task4,"Cla1Prog");
+#pragma CODE_SECTION(Cla1Task5,"Cla1Prog");
+#pragma CODE_SECTION(Cla1Task6,"Cla1Prog");
+#pragma CODE_SECTION(Cla1Task7,"Cla1Prog");
+#pragma CODE_SECTION(Cla1Task8,"Cla1Prog");
+
+__interrupt void Cla1Task1 ( void )
+{
+	ClatoCpuVar._f32VpfcPiOut = 0;
+	ClatoCpuVar._f32VpfcPiTmp = 0;
+	ClatoCpuVar._f32VpfcErr0 = 0.0f;
+	ClatoCpuVar._f32IpfcPiOut = 0.0f;
+	ClatoCpuVar.f32IpfcPi_P = 0.0f;
+	ClatoCpuVar.f32IpfcPi_I = 0.0f;
+	ClatoCpuVar.f32CurrErrorSign = 1;
+	ClatoCpuVar.f32SoftStartCtrl = 0.0f;
+	ClatoCpuVar.f32VpfcFilterDis = 0.0f;
+}
+__interrupt void Cla1Task2 ( void )
+{
+	__mdebugstop();
+
+	EPwm9Regs.ETCLR.all = 0x1;
+
+	if((++ClatoCpuVar._f32SwitchCnt) >= 4.0f)
+	{
+		ClatoCpuVar._f32SwitchCnt = 0.0;
+
+		ClatoCpuVar._f32AdVpfcOVP0 = (float)ADC_PFCVSAMP;
+		ClatoCpuVar._f32VpfcProtectTmp =	((float)0.9972076) * ClatoCpuVar._f32VpfcProtectTmp +
+				((float)0.0013886)	* (ClatoCpuVar._f32AdVpfcOVP1 + ClatoCpuVar._f32AdVpfcOVP0);
+		ClatoCpuVar._f32AdVpfcOVP1 = ClatoCpuVar._f32AdVpfcOVP0;
+		ClatoCpuVar._iVpfcProtect = __mf32toi16r(ClatoCpuVar._f32VpfcProtectTmp);
+	}
+	//-------------------------------
+	else if (ClatoCpuVar._f32SwitchCnt == 1.0f)
+	{
+		ClatoCpuVar._f32AcSamVoltSquare0 = ClatoCpuVar._f32AdAcVolt * ClatoCpuVar._f32AdAcVolt;
+
+		ClatoCpuVar._f32AcVoltSquareFilt += (ClatoCpuVar._f32AcSamVoltSquare1
+				+ ClatoCpuVar._f32AcSamVoltSquare0
+				- ClatoCpuVar._f32AcVoltSquareFilt - ClatoCpuVar._f32AcVoltSquareFilt)
+						* (float32)0.000137211;
+		ClatoCpuVar._f32AcSamVoltSquare1 = ClatoCpuVar._f32AcSamVoltSquare0;
+
+		ClatoCpuVar._f32AcVoltSquareRms +=
+		(ClatoCpuVar._f32AcVoltSquareFilt1 + ClatoCpuVar._f32AcVoltSquareFilt
+		- ClatoCpuVar._f32AcVoltSquareRms - ClatoCpuVar._f32AcVoltSquareRms)
+		* (float32)0.000137211;
+		ClatoCpuVar._f32AcVoltSquareFilt1 = ClatoCpuVar._f32AcVoltSquareFilt;
+	}
+	else if (ClatoCpuVar._f32SwitchCnt == 2.0)
+	{
+		if ( ((float32)(ADC_PFCVSAMP - CputoClaVar._iVpfcSet)>180.0f)
+			|| (1.0f == ClatoCpuVar.f32PfcQuickLoopForce)
+			||	( ((float)CputoClaVar.u16PfcOpened == 1.0f)
+				&& ((float32)(ADC_PFCVSAMP - CputoClaVar._iVpfcSet)<-180.0f) )
+			)
+		{
+			ClatoCpuVar.f32PfcQuickLoopForce = 0.0f;
+
+			ClatoCpuVar._f32PfcQuickLoop = 0.0f;
+			if (0.0f == ClatoCpuVar._f32VpfcPara)
+			{
+				ClatoCpuVar._f32VpfcPara = 2.0f;
+				ClatoCpuVar.f32VpfcFilterDis = 1.0f;
+			}
+		}
+		else if (3.0f == ClatoCpuVar._f32VpfcPara)
+		{
+			ClatoCpuVar._f32VpfcPara = 0.0f;
+			ClatoCpuVar.f32VpfcFilterDis = 0.0f;
+		}
+
+	}
+	else if (ClatoCpuVar._f32SwitchCnt == 3.0f)
+	{
+		if ( ++ClatoCpuVar._f32PfcQuickLoop >= 4200.0f )
+		{
+			ClatoCpuVar._f32PfcQuickLoop = 4200.0f;
+			if(2.0f == ClatoCpuVar._f32VpfcPara)
+				{ClatoCpuVar._f32VpfcPara = 3.0f;}
+		}
+	}
+
+	ClatoCpuVar._f32AdVpfc0 = (float)ADC_PFCVSAMP;
+	ClatoCpuVar._f32VpfcUse = (ClatoCpuVar._f32AdVpfc1 + ClatoCpuVar._f32AdVpfc0) * CputoClaVar._f32VpfcFilterK2
+			+ ClatoCpuVar._f32VpfcUse * CputoClaVar._f32VpfcFilterK1;
+	ClatoCpuVar._f32AdVpfc1 = ClatoCpuVar._f32AdVpfc0;
+
+	if (1.0f == ClatoCpuVar.f32VpfcFilterDis)
+	{
+		ClatoCpuVar._f32VpfcErr0 = ((float)CputoClaVar._iVpfcSet - ClatoCpuVar._f32AdVpfc0) * 1.6f;
+	}
+	else
+	{
+		ClatoCpuVar._f32VpfcErr0 = ((float)CputoClaVar._iVpfcSet - ClatoCpuVar._f32VpfcUse) * 0.8f;
+	}
+	ClatoCpuVar._f32VpfcPiOut = __mmaxf32(
+			__mminf32(ClatoCpuVar._f32VpfcPiOut + CputoClaVar._f32VpfcLoopKi * ClatoCpuVar._f32VpfcErr0,
+					8000.0f), -1000.0f);
+
+	ClatoCpuVar._f32VpfcPiTmp = __mmaxf32(
+			__mminf32(ClatoCpuVar._f32VpfcPiOut+ CputoClaVar._f32VpfcLoopKp * ClatoCpuVar._f32VpfcErr0,
+					7000.0f), -1000.0f);
+
+//-------------------------------
+	ClatoCpuVar._f32AdAcVolt = ((float)ADC_VACIN - 2100.0f);
+
+	ClatoCpuVar._f32IdcSample0 = (float)ADC_BATCURR_DC;
+	__mdebugstop();
+
+	ClatoCpuVar._f32DynIdcUse =
+	ClatoCpuVar._f32DynIdcUse	* CputoClaVar._f32DynIdcFilter1 +
+	(ClatoCpuVar._f32IdcSample1 + ClatoCpuVar._f32IdcSample0)	* CputoClaVar._f32DynIdcFilter2;
+
+	ClatoCpuVar._f32IdcSample1 = ClatoCpuVar._f32IdcSample0;
+
+	if ((++ClatoCpuVar._f32LoadDynTimer) >= 35.0)
+	{
+		ClatoCpuVar._f32LoadDynTimer = 0.0;
+
+		ClatoCpuVar._f32Idc3 = ClatoCpuVar._f32Idc2;
+		ClatoCpuVar._f32Idc2 = ClatoCpuVar._f32Idc1;
+		ClatoCpuVar._f32Idc1 = ClatoCpuVar._f32Idc0;
+		ClatoCpuVar._f32Idc0 = ClatoCpuVar._f32DynIdcUse;
+
+		if ( ( (float32)CputoClaVar._u16PfcLoopCount >= 220.0f )
+			&& ( fabs(ClatoCpuVar._f32Idc0 - ClatoCpuVar._f32Idc3) > 130.0f ))
+			{
+
+				ClatoCpuVar.f32Flag = __mminf32(ClatoCpuVar.f32Flag + 1.0f, 3.0f);
+
+				ClatoCpuVar.f32PfcQuickLoopForce = 1.0f;
+
+				ClatoCpuVar._f32VpfcPiTmp = ClatoCpuVar._f32VpfcPiOut = __mmaxf32(
+						__mminf32(	ClatoCpuVar._f32IdcSample0 * CputoClaVar.f32AdVdcDis
+								* 0.00033774932f, 4000.0f), -1000.0f);
+			}//
+			else
+			{
+				ClatoCpuVar.f32Flag = __mmaxf32(ClatoCpuVar.f32Flag - 1.0f, 0.0f);
+			}
+	}
+
+	ClatoCpuVar._f32PiDynTmpUse = __mmaxf32( __mminf32(
+			ClatoCpuVar._f32PiDynTmpUse * CputoClaVar._f32PiDynTempFilter1 +
+						CputoClaVar._f32PiDynTempFilter2 * (ClatoCpuVar.f32VpfcPiTmpOld + ClatoCpuVar._f32VpfcPiTmp),
+						7000.0f), -1000.0f);
+	ClatoCpuVar.f32VpfcPiTmpOld = ClatoCpuVar._f32VpfcPiTmp;
+
+	if (ClatoCpuVar.f32Flag <= 0.1f)
+	{
+		ClatoCpuVar._f32PioutUse = ClatoCpuVar._f32PiDynTmpUse = ClatoCpuVar._f32VpfcPiTmp;
+	}
+	else
+	{
+		ClatoCpuVar._f32PioutUse = ClatoCpuVar._f32PiDynTmpUse;
+	}
+
+
+	ClatoCpuVar._f32IpfcSet = ClatoCpuVar._f32PioutUse * ClatoCpuVar._f32AdAcVolt * \
+			CputoClaVar.f32VacRmsSqrInv;
+
+
+	ClatoCpuVar._f32AdIpfc = (((float)CputoClaVar._iIpfcOffset - (float)ADC_PFCCUR) +
+	((float)CputoClaVar._iIpfcOffset - (float)ADC_PFCCUR_C)) * 0.5f;
+	ClatoCpuVar._f32IpfcErr1 = ClatoCpuVar._f32IpfcErr0;
+	ClatoCpuVar._f32IpfcErr0 = (ClatoCpuVar._f32AdIpfc - ClatoCpuVar._f32IpfcSet);
+
+	ClatoCpuVar._f32IpfcErrUse1 = ClatoCpuVar._f32IpfcErrUse0; //save for next loop
+	ClatoCpuVar._f32IpfcErrUse0 = ClatoCpuVar._f32IpfcErr0;
+
+	ClatoCpuVar.f32IpfcPi_P = ClatoCpuVar._f32IpfcErrUse0 * (-ClatoCpuVar._f32IpfcLoopK4);
+	ClatoCpuVar.f32IpfcPi_I = __mmaxf32( __mminf32(
+			ClatoCpuVar.f32IpfcPi_I + ClatoCpuVar._f32IpfcErrUse0 * (ClatoCpuVar._f32IpfcLoopK3 + ClatoCpuVar._f32IpfcLoopK4),
+			180.0f),-180.0f);
+	ClatoCpuVar._f32IpfcPiOut = ClatoCpuVar.f32IpfcPi_P + ClatoCpuVar.f32IpfcPi_I
+			+ ClatoCpuVar._f32AdAcVolt *__meinvf32(ClatoCpuVar._f32AdVpfc0) * 1427.6f;
+
+	if ( ((float)ADC_PFCVSAMP - (float)CputoClaVar._iVpfcSet >= 210.0f)
+		||	((float32)ADC_PFCVSAMP >=  3610.0f)
+		&& (ClatoCpuVar._f32VpfcPiOut > 20.0f)
+	)
+	{
+		ClatoCpuVar._f32VpfcPiOut -= 10.0f;
+	}
+
+
+	if  (MODE_INV == CputoClaVar.u16WorkMode)
+	{
+				ClatoCpuVar.f32Mod_Inv = __mminf32(
+					(float)(8.118f*325.0f) *__meinvf32(ClatoCpuVar._f32AdVpfc0), 0.95);//0.95f;
+
+			ClatoCpuVar._f32IpfcPiOut = (1.0f - ClatoCpuVar.f32Mod_Inv *  fabs( CputoClaVar.f32Sin_Theta)) * (float32)PFC_PRD;
+
+			if((0x5 == EPwm9Regs.AQCSFRC.all) || (0x5 == EPwm10Regs.AQCSFRC.all))
+			{
+				EPwm9Regs.CMPA.bit.CMPA = EPwm9Regs.TBPRD;
+				EPwm10Regs.CMPA.bit.CMPA = 0u;
+				GpioDataRegs.GPACLEAR.all = C28X_BIT22|C28X_BIT23;
+				SET_PWM_DBRED(9, EPwm9Regs.TBPRD<<1);
+				SET_PWM_DBRED(10, EPwm10Regs.TBPRD<<1);
+				ClatoCpuVar.f32CurrErrorSign = 0.0f;
+				ClatoCpuVar.f32SoftStartCtrl = 0.0f;
+			}
+			else if	(CputoClaVar.f32Sin_Theta > 0.015f)
+			{
+				if(-1.0f != ClatoCpuVar.f32SoftStartCtrl)
+				{
+					ClatoCpuVar.f32IpfcPi_I = 0.0f;
+					ClatoCpuVar.f32SoftStartCtrl = -1.0f;
+
+					Cmpss4Regs.DACHVALS.all = 2048+800;
+					Cmpss4Regs.DACLVALS.all =  2048-300;
+
+					ClatoCpuVar.f32CurrErrorSign = -1.0f;
+
+					ClatoCpuVar._f32Rsvd5 = (float32)(EPwm9Regs.TBPRD);
+					EPwm9Regs.CMPA.bit.CMPA = EPwm9Regs.TBPRD;
+					EPwm10Regs.CMPA.bit.CMPA = 0u;
+					GpioDataRegs.GPACLEAR.all = C28X_BIT22|C28X_BIT23;
+					SET_PWM_DBRED(9, EPwm9Regs.TBPRD<<1);
+					SET_PWM_DBRED(10, EPwm10Regs.TBPRD<<1);
+				}
+				else if( ClatoCpuVar._f32Rsvd5 > (float32)PFC_DUTY_MAX )
+				{
+					GpioDataRegs.GPACLEAR.bit.GPIO22 = 1;
+
+					EPwm9Regs.CMPA.bit.CMPA = __mf32toui16r(__mmaxf32(ClatoCpuVar._f32IpfcPiOut, ClatoCpuVar._f32Rsvd5));
+					EPwm10Regs.CMPA.bit.CMPA = 0u;
+
+					SET_PWM_DBRED(9, PFC_DB_TIME);
+					SET_PWM_DBRED(10, EPwm10Regs.TBPRD<<1);
+
+					ClatoCpuVar._f32Rsvd5 -= 25.0f;
+
+					GpioDataRegs.GPASET.bit.GPIO23 = 1;
+				}
+				else
+				{
+					GpioDataRegs.GPACLEAR.bit.GPIO22 = 1;
+					EPwm9Regs.CMPA.bit.CMPA = __mf32toui16r(ClatoCpuVar._f32IpfcPiOut);
+					EPwm10Regs.CMPA.bit.CMPA = __mf32toui16r(__mminf32(ClatoCpuVar._f32IpfcPiOut, 645.0f));
+					SET_PWM_DBRED(9, PFC_DB_TIME);
+					SET_PWM_DBRED(10, __mf32toui16r(__mmaxf32((float32)EPwm10Regs.DBRED.bit.DBRED - 50.0f, (float32)PFC_DB_TIME)));
+					GpioDataRegs.GPASET.bit.GPIO23 = 1;
+				}
+			}
+			else if	(CputoClaVar.f32Sin_Theta < -0.015f)
+			{
+				if(1.0f != ClatoCpuVar.f32SoftStartCtrl)
+				{
+
+					ClatoCpuVar.f32IpfcPi_I = 0.0f;
+					ClatoCpuVar.f32SoftStartCtrl = 1.0f;
+					Cmpss4Regs.DACHVALS.all = 2048+300;
+					Cmpss4Regs.DACLVALS.all =  2048-800;
+					ClatoCpuVar.f32CurrErrorSign = 1.0f;
+
+					ClatoCpuVar._f32Rsvd5 = 0.0f;
+					EPwm9Regs.CMPA.bit.CMPA = EPwm9Regs.TBPRD;
+					EPwm10Regs.CMPA.bit.CMPA = 0u;
+					GpioDataRegs.GPACLEAR.all = C28X_BIT22|C28X_BIT23;
+					SET_PWM_DBRED(9, EPwm9Regs.TBPRD<<1);
+					SET_PWM_DBRED(10, EPwm10Regs.TBPRD<<1);
+				}
+				else if(ClatoCpuVar._f32Rsvd5 < (float32)PFC_DUTY_MIN)
+				{
+					GpioDataRegs.GPACLEAR.bit.GPIO23 = 1;
+
+					EPwm9Regs.CMPA.bit.CMPA = EPwm9Regs.TBPRD;
+					EPwm10Regs.CMPA.bit.CMPA  = __mf32toi16r(__mminf32((float)EPwm9Regs.TBPRD - ClatoCpuVar._f32IpfcPiOut,
+							ClatoCpuVar._f32Rsvd5));
+
+					SET_PWM_DBRED(9, EPwm9Regs.TBPRD<<1);
+					SET_PWM_DBRED(10, PFC_DB_TIME);
+
+					ClatoCpuVar._f32Rsvd5 += 25.0f;
+
+					GpioDataRegs.GPASET.bit.GPIO22 = 1;
+				}
+				else
+				{
+					GpioDataRegs.GPACLEAR.bit.GPIO23 = 1;
+					EPwm9Regs.CMPA.bit.CMPA = __mf32toi16r(__mmaxf32((float)EPwm9Regs.TBPRD - ClatoCpuVar._f32IpfcPiOut,70.0f));
+					EPwm10Regs.CMPA.bit.CMPA  = __mf32toi16r((float)EPwm9Regs.TBPRD - ClatoCpuVar._f32IpfcPiOut);
+					SET_PWM_DBRED(9, __mf32toui16r(__mmaxf32((float32)EPwm9Regs.DBRED.bit.DBRED - 50.0f, (float32)PFC_DB_TIME)));
+					SET_PWM_DBRED(10, PFC_DB_TIME);
+					GpioDataRegs.GPASET.bit.GPIO22 = 1;
+				}
+			}
+			else
+			{
+				EPwm9Regs.CMPA.bit.CMPA = EPwm9Regs.TBPRD;
+				EPwm10Regs.CMPA.bit.CMPA = 0u;
+				GpioDataRegs.GPACLEAR.all = C28X_BIT22|C28X_BIT23;
+				SET_PWM_DBRED(9, EPwm9Regs.TBPRD<<1);
+				SET_PWM_DBRED(10, EPwm10Regs.TBPRD<<1);
+				ClatoCpuVar.f32CurrErrorSign = 0.0f;
+				ClatoCpuVar.f32SoftStartCtrl = 0.0f;
+			}
+	}
+	else if(MODE_REC == CputoClaVar.u16WorkMode)
+	{
+		if (	( (float32)ADC_PFCVSAMP >=  3620.0f )
+			 || ( (float32)ADC_PFCOVP >=  3620.0f )
+			 || ( (float32)ADC_PFCVSAMP <= 563.0 )
+			 || (0x5 == EPwm9Regs.AQCSFRC.all)
+			)
+		{
+			EPwm9Regs.CMPA.bit.CMPA = EPwm9Regs.TBPRD;
+			EPwm10Regs.CMPA.bit.CMPA = 0u;
+			GpioDataRegs.GPACLEAR.all = C28X_BIT22|C28X_BIT23;
+			ClatoCpuVar.f32CurrErrorSign = 0.0f;
+			ClatoCpuVar.f32SoftStartCtrl = 0.0f;
+		}
+		else
+		{
+			ClatoCpuVar._f32IpfcPiOut = __mmaxf32(
+					__mminf32(ClatoCpuVar._f32IpfcPiOut, 746.0f), -746.0f);
+
+
+
+
+			ClatoCpuVar._f32Rsvd5 =
+					__mmaxf32(756.0f - 9600.0f * fabs( CputoClaVar.f32Sin_Theta), 0.0f);
+
+			if(CputoClaVar.f32Sin_Theta < 0.0f)
+			{
+				ClatoCpuVar.f32IpfcPiOutUse =  __mmaxf32( __mminf32(-ClatoCpuVar._f32IpfcPiOut,	745.0f), 1.0f);
+				if(-1.0f != ClatoCpuVar.f32SoftStartCtrl)
+				{
+					ClatoCpuVar.f32SoftStartCtrl = -1.0f;
+					Cmpss4Regs.DACHVALS.all = 2010+1500;
+					Cmpss4Regs.DACLVALS.all = 2010-260;
+					ClatoCpuVar.f32CurrErrorSign = -1.0f;
+					ClatoCpuVar.f32IpfcPi_I = 0.0f;
+				}
+
+
+				if(CputoClaVar.f32Sin_Theta < -0.076f)
+				{
+					GpioDataRegs.GPASET.all = C28X_BIT22;
+				}
+				else
+				{
+					GpioDataRegs.GPACLEAR.all = C28X_BIT22|C28X_BIT23;
+					ClatoCpuVar.f32IpfcPi_I = 0.0f;
+				}
+
+			}
+			else
+			{
+				ClatoCpuVar.f32IpfcPiOutUse =  __mmaxf32( __mminf32(746.0f-ClatoCpuVar._f32IpfcPiOut, 745.0f), 1.0f);
+				if(1.0f != ClatoCpuVar.f32SoftStartCtrl)
+				{
+					ClatoCpuVar.f32SoftStartCtrl = 1.0f;
+					Cmpss4Regs.DACLVALS.all = 2010-1500;
+					Cmpss4Regs.DACHVALS.all = 2010+260;
+					ClatoCpuVar.f32CurrErrorSign = 1.0f;
+					ClatoCpuVar.f32IpfcPi_I = 0.0f;
+				}
+
+				if(CputoClaVar.f32Sin_Theta > 0.076f)
+				{
+					GpioDataRegs.GPASET.all = C28X_BIT23;
+				}
+				else
+				{
+					GpioDataRegs.GPACLEAR.all = C28X_BIT22|C28X_BIT23;
+					ClatoCpuVar.f32IpfcPi_I = 0.0f;
+				}
+
+
+			}
+
+			EPwm9Regs.CMPA.bit.CMPA = __mf32toui16r(__mminf32(ClatoCpuVar.f32IpfcPiOutUse + ClatoCpuVar._f32Rsvd5, 745.0f));//(float)EPwm9Regs.TBPRD
+			EPwm10Regs.CMPA.bit.CMPA = __mf32toui16r(__mmaxf32(ClatoCpuVar.f32IpfcPiOutUse - ClatoCpuVar._f32Rsvd5, 1.0f));
+		}
+	}
+	else
+	{
+		EPwm9Regs.CMPA.bit.CMPA = EPwm9Regs.TBPRD;
+		EPwm10Regs.CMPA.bit.CMPA = 0u;
+		GpioDataRegs.GPACLEAR.all = C28X_BIT22|C28X_BIT23;
+
+		ClatoCpuVar._f32VpfcPiOut = 0;
+		ClatoCpuVar._f32VpfcPiTmp = 0;
+		ClatoCpuVar._f32VpfcErr0 = 0.0f;
+		ClatoCpuVar._f32IpfcPiOut = 0.0f;
+		ClatoCpuVar.f32IpfcPi_P = 0.0f;
+		ClatoCpuVar.f32IpfcPi_I = 0.0f;
+		ClatoCpuVar.f32CurrErrorSign = 0.0f;
+		ClatoCpuVar.f32SoftStartCtrl = 0.0f;
+	}
+		__mdebugstop();//for asm generation:
+}
+
+
+__interrupt void Cla1Task7 ( void )
+{
+}
+
+
+
+__interrupt void Cla1Task8 ( void )
+{
+	__mdebugstop();
+	ClatoCpuVar._f32AdVpfc0 = (float)0x1480 + 2.0f;
+	do
+		{
+			*((float32 *)__mf32toui16r(ClatoCpuVar._f32AdVpfc0) ) = 0.0f;
+			ClatoCpuVar._f32AdVpfc0+=2.0f;
+		}
+	while(ClatoCpuVar._f32AdVpfc0 < (float)0x1500);
+
+	__mdebugstop();
+	__asm("  MSETFLG RNDF32=1");
+
+	ClatoCpuVar._f32AdVpfc0 = 0.0f;
+
+
+	ClatoCpuVar._f32IpfcLoopK3 = (float32)(2.45692778/8);
+	ClatoCpuVar._f32IpfcLoopK4 = (float32)(-2.41321348/8);
+
+
+
+	ClatoCpuVar._f32LoadDynTimer = 74.0;
+	ClatoCpuVar._u16PfcDutyMin = PFC_DUTY_MIN;
+	ClatoCpuVar.f32CurrErrorSign = 0.0f;
+	ClatoCpuVar._f32IpfcPiOut = 0.0f;
+}
+
+__interrupt void Cla1Task3 ( void )
+{
+
+}
+__interrupt void Cla1Task4 ( void )
+{
+
+}
+__interrupt void Cla1Task5 ( void )
+{
+
+}
+__interrupt void Cla1Task6 ( void )
+{
+
+}
+
+
+
+

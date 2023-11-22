@@ -1,0 +1,101 @@
+#ifndef DSP280x_DEVICE
+#define DSP280x_DEVICE
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+//---------------------------------------------------------------------------
+// Include All Peripheral Header Files:
+//
+#include "F28x_Project.h"
+
+struct MDLCTRL_BITS {	    // bits  description
+	Uint16  rsvd0:8;       // Previously "8"
+    Uint16  OFFCTRL:1;     // Previously "1"
+    Uint16  rsvd1:1;       // Previously "1"
+    Uint16  Rec_Inv:2;     // Previously "2"
+    Uint16  SHORTRELAY:1;  // Previously "1"
+    Uint16  rsvd2:2;       // Previously "2"
+    Uint16  SREnable:1;    // Previously "1"
+};
+
+typedef	union {
+   Uint16               all;
+   struct MDLCTRL_BITS   bit;
+}ubitinta;
+
+struct MDLSTAT_BITS {         // bits  description
+    Uint16  OFFSTAT:1;
+    Uint16  DCOV:1;
+    Uint16  AMBIOT:1;
+    Uint16  PhaseUnlock:1;    // phase lock loop is a control system that generates an output signal whose phase is related to the phase of an input signal
+    Uint16  rsvd0:1;
+    Uint16  ACUV:1;
+    Uint16  ACOV:1;
+    Uint16  PFCUV:1;
+    Uint16  PFCOV:1;
+    Uint16  CALIBRFAIL:1;
+    Uint16  NOCONTROLLER:1;
+    Uint16  SrOn:1;
+    Uint16  rsvd1:3;
+    Uint16  HVSDLOCK:1;
+};
+
+typedef	union {
+   Uint16               all;
+   struct MDLSTAT_BITS   bit;
+}ubitintb;
+
+
+struct MDLSTAT_H_BITS {         // bits  description
+    Uint16  DCOT:1;
+    Uint16  PFCOT:1;
+    Uint16  SROT:1;
+    Uint16  DCHWOV:1;
+    Uint16  rsd:12;
+};
+
+typedef	union {
+   Uint16               all;
+   struct MDLSTAT_H_BITS   bit;
+}ubitinte;
+
+struct RUNFLAG_BITS {         // bits  description
+    Uint16  CAL:1;
+    Uint16  WARN:1;
+    Uint16  rsd0:4;
+    Uint16  ADC:1;
+    Uint16  LIGHT:1;
+    Uint16  rsd1:5;
+    Uint16  Tx3SFlag:1; //13
+    Uint16  rsd:2;				// 15:14
+};
+
+typedef	union {
+   Uint16               all;
+   struct RUNFLAG_BITS   bit;
+}ubitintc;
+
+
+#define	CAN_RXBUF_EMPTY	  	0
+#define	CAN_RXBUF_RDY	  	1
+
+#include "IQmathLib.h"
+#include "OBC_isr.h"
+#include "OBC_main.h"
+#include "OBC_constant.h"
+#include "A_constant.h"
+
+
+
+#ifdef __cplusplus
+}
+#endif /* extern "C" */
+
+#endif
+
+
+//===========================================================================
+// End of file.
+//===========================================================================

@@ -1,0 +1,182 @@
+/*******************************************************************************
+ * ChargeCan.h
+ *
+ *  Created on: 2017年3月24日
+ *      Author:
+ ******************************************************************************/
+
+#ifndef CHARGECAN_H_
+#define CHARGECAN_H_
+
+#include "F28x_Project.h"
+
+
+#define CHARGE_SET_V_I_ON_A3			0xA3//0x18A3xxxx ---- 10s周期性发送
+#define CHARGE_SET_V_I_OFF_A4			0xA4//0x18A4xxxx ---- 先关机，再处理值
+#define CHARGE_READ_LIMIT_A8			0xA8//0x18A8xxxx //Reply:0x18B8xxxx 0x18B9xxxx
+
+
+#define CHARGE_Calibrate_AB            0xAB//0x18A8xxxx //Reply:0x18B8xxxx 0x18B9xxxx
+
+
+#define REPLYID_3S_B2_1			(UINT32)(0x18B2F4E5)//0xB2
+#define REPLYID_30S_B2_2		(UINT32)(0x18B0F4E5)//0xB2
+#define REPLYID_STATUS_B3		(UINT32)(0x18B3F4E5)//0xB3
+#define REPLYID_READ_LIMIT_B8	(UINT32)(0x18B8F4E5)//0xB8
+#define REPLYID_READ_LIMIT_B9	(UINT32)(0x18B9F4E5)//0xB9
+#define REPLYID_READ_LIMIT_BB   (UINT32)(0x18BBF4E5)
+#define REPLYID_READ_LIMIT_BC   (UINT32)(0x18BCF4E5)
+
+#if 1 //重要定义如下
+//=============TI eCAN MailBox definiton===================
+/* eCAN Message Data Register low (MDR_L) word definitions */
+struct  CANMDL_WORDS {      // bits  description
+   Uint16      LOW_WORD:16; // 0:15
+   Uint16      HI_WORD:16;  // 31:16
+};
+
+/* eCAN Message Data Register low (MDR_L) byte definitions */
+struct  CANMDL_BYTES {      // bits   description
+   Uint16      BYTE3:8;     // 31:24
+   Uint16      BYTE2:8;     // 23:16
+   Uint16      BYTE1:8;     // 15:8
+   Uint16      BYTE0:8;     // 7:0
+};
+
+
+/* Allow access to the bit fields or entire register */
+
+union CANMDL_REG {
+   Uint32                all;
+   struct CANMDL_WORDS   word;
+   struct CANMDL_BYTES   byte;
+};
+
+
+
+/* eCAN Message Data Register high  (MDR_H) word definitions */
+struct  CANMDH_WORDS {         // bits  description
+   Uint16      LOW_WORD:16;    // 0:15
+   Uint16      HI_WORD:16;     // 31:16
+};
+
+/* eCAN Message Data Register low (MDR_H) byte definitions */
+struct  CANMDH_BYTES {      // bits   description
+   Uint16      BYTE7:8;     // 63:56
+   Uint16      BYTE6:8;     // 55:48
+   Uint16      BYTE5:8;     // 47:40
+   Uint16      BYTE4:8;     // 39:32
+};
+
+/* Allow access to the bit fields or entire register */
+union CANMDH_REG {
+   Uint32                  all;
+   struct CANMDH_WORDS     word;
+   struct CANMDH_BYTES     byte;
+};
+//================================
+#endif
+
+//===============ID Field Definition======================
+// CA should use only PDUFormat.
+struct J1939_MESSAGE_ID{
+	unsigned int	SrcAddr:8;//SA：SourceAddress:244 as default, CCS Addr
+	unsigned int	DA_PDUSpecific:8;	//PS:PDU1 format,used as DestinationAddr:229(BMS Addr)
+	unsigned int	PDUFormat:8; 	//PF:6 as default，即小于240，为PDU1 Format
+	unsigned int	DataPage:1;//0 as default
+	unsigned int	Rsvd:1;//DP Extension: 0 for most application
+	unsigned int	Priority:3;//6 as default
+
+	Uint16      	AAM:1;			// 29:0 不响应远程帧
+	Uint16      	AME:1;          // 30:1 使用接收滤波
+	Uint16      	IDE:1;          // 31:1 as default, 29bits
+};
+
+struct  CHARGE_CANMSGID_BITS {     	// bits  description
+   Uint16      SrcAddr:8;  				// 0:7
+   Uint16      DstAddr:8;    			// 8:15  >=128  组号; <128模块号
+   Uint16	   CMD:8; 					// 16:23
+   Uint16	   Priority:5; 				// 24:28 //0x18
+   Uint16      rsvd1:1;          				// 29
+   Uint16      rsvd2:1;          				// 30
+   Uint16      rsvd3:1;          				// 31
+};
+
+union Charge_MSGID {
+   Uint32                				all;
+   struct  CHARGE_CANMSGID_BITS			CHG_Bits;
+};
+
+
+struct MBOXDATA_BITS {//8Bytes=64bits
+   union CANMDL_REG       MDL;
+   union CANMDH_REG       MDH;
+};
+
+union CAN_MSG_DATA//64Bits  <8Bytes> in total
+{
+	struct MBOXDATA_BITS MBoxDataBits;
+};
+
+
+struct Charge_MESSAGE
+{
+  	union Charge_MSGID			id;
+   	union CAN_MSG_DATA       	DataAll;
+};
+
+struct heartbeat_MESSAGE {
+
+};
+
+
+
+
+//=================Variables==============================
+extern struct Charge_MESSAGE  Charge_g_stCanTxData;
+extern struct Charge_MESSAGE  Charge_g_stCanRxData;
+extern struct Charge_MESSAGE heartbeat_data;
+
+extern UINT16	g_u16GroupSaved;
+//=================Functions==============================
+//--------------DCAN
+extern uint32_t setCANBitRate(uint32_t sourceClock, uint32_t bitRate);
+extern void Init_ConfigCAN(void);
+extern void ConfigCAN(void);
+extern void setupMessageObject(MsgObjN objNUM, uint16_t messageSize, uint32_t msgID, \
+										uint32_t msgMaskID, msgObjType msgType);
+
+//函数声明中的数据类型要优先定义，否则#233-D Declaration is not visible outside of function.
+extern bool bGetCANMessage(MsgObjN objNUM, uint16_t messageSize, struct Charge_MESSAGE *pdata);
+extern void vSendCANMessage(MsgObjN objNUM, uint16_t messageSize, struct Charge_MESSAGE *pdata);
+//---------------------------
+
+
+
+void Charge_main(void);
+void Charge_InitID(void);
+void Charge_sCanBufferInitial(void);
+//receive mail box
+//transmit mail box reset
+//transmit mail box transmit data
+void Charge_sCanHdSend3(struct Charge_MESSAGE *pdata);
+
+//receive mail box
+void Charge_sCanHdRead2(struct Charge_MESSAGE *pdata);
+
+void Charge_sCanRxISR2(void);
+UINT16	Charge_sCanRead(struct Charge_MESSAGE *pdata);
+void Charge_sCanTxISR3(void);
+void	Charge_sCanWrite3(struct Charge_MESSAGE	*pdata);
+void	Charge_sCanSendTrigger3(Uint16 FrameCnt);
+void Charge_sDecodeCanRxFrame(struct Charge_MESSAGE stRxFrameTemp);
+
+
+void sEncodeTxData_B2_01_3S(void);
+void sEncodeTxData_B2_02_30S(void);
+void sEncodeTxData_B3_3S_Inner(UINT16 u16WarnStatus);
+UINT16 vStatusTrans(void);
+
+
+
+#endif
